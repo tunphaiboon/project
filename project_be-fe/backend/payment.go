@@ -1,0 +1,91 @@
+package main
+
+import (
+	"encoding/json"
+	"net/http"
+	"os"
+	"strconv"
+
+	"github.com/stripe/stripe-go/v79"
+	"github.com/stripe/stripe-go/v79/paymentintent"
+)
+
+func getStripeKey() string {
+	return os.Getenv("STRIPE_SECRET_KEY")
+}
+
+func (a *App) CreatePaymentIntent(w http.ResponseWriter, r *http.Request, userID int64) {
+	stripe.Key = getStripeKey()
+
+	var total int64
+	err := a.DB.QueryRow(r.Context(), `
+		SELECT COALESCE(SUM(p.price_satang * ci.qty), 0)
+		FROM cart_items ci JOIN products p ON p.id = ci.product_id
+		WHERE ci.user_id = $1`, userID).Scan(&total)
+	if err != nil {
+		a.internal(w, err)
+		return
+	}
+	if total <= 0 {
+		writeError(w, http.StatusBadRequest, "ตะกร้าว่างเปล่า")
+		return
+	}
+
+	pi, err := paymentintent.New(&stripe.PaymentIntentParams{
+		Amount:   stripe.Int64(total),
+		Currency: stripe.String("thb"),
+		AutomaticPaymentMethods: &stripe.PaymentIntentAutomaticPaymentMethodsParams{
+			Enabled: stripe.Bool(true),
+		},
+		Metadata: map[string]string{"user_id": strconv.FormatInt(userID, 10)},
+	})
+	if err != nil {
+		a.internal(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"clientSecret": pi.ClientSecret,
+		"amount":       total,
+	})
+}
+
+func (a *App) ConfirmOrder(w http.ResponseWriter, r *http.Request, userID int64) {
+	stripe.Key = getStripeKey()
+
+	var req struct {
+		PaymentIntentID string `json:"paymentIntentId"`
+		Address         string `json:"address"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.PaymentIntentID == "" {
+		writeError(w, http.StatusBadRequest, "ข้อมูลไม่ครบ")
+		return
+	}
+
+	pi, err := paymentintent.Get(req.PaymentIntentID, nil)
+	if err != nil {
+		a.internal(w, err)
+		return
+	}
+
+	if pi.Metadata["user_id"] != strconv.FormatInt(userID, 10) {
+		writeError(w, http.StatusForbidden, "รายการชำระเงินนี้ไม่ใช่ของคุณ")
+		return
+	}
+	if pi.Status != stripe.PaymentIntentStatusSucceeded {
+		writeError(w, http.StatusPaymentRequired, "การชำระเงินยังไม่สำเร็จ")
+		return
+	}
+
+	orderID, total, err := a.createOrderFromCart(r.Context(), userID, req.Address, pi.ID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"orderId":     orderID,
+		"totalSatang": total,
+		"status":      "paid",
+	})
+}
