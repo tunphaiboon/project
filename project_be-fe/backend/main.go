@@ -33,14 +33,12 @@ func main() {
 	app := &App{DB: pool, Secret: []byte(secret)}
 	mux := http.NewServeMux()
 
-	// Public routes
 	mux.HandleFunc("GET /api/categories", app.ListCategories)
 	mux.HandleFunc("GET /api/products", app.ListProducts)
 	mux.HandleFunc("GET /api/products/{id}", app.GetProduct)
 	mux.HandleFunc("POST /api/auth/register", app.Register)
 	mux.HandleFunc("POST /api/auth/login", app.Login)
 
-	// Member routes (Cart & Payment)
 	mux.HandleFunc("GET /api/cart", app.requireAuth(app.GetCart))
 	mux.HandleFunc("PUT /api/cart/{productId}", app.requireAuth(app.SetCartItem))
 	mux.HandleFunc("DELETE /api/cart/{productId}", app.requireAuth(app.RemoveCartItem))
@@ -48,10 +46,18 @@ func main() {
 	mux.HandleFunc("POST /api/payments/intent", app.requireAuth(app.CreatePaymentIntent))
 	mux.HandleFunc("POST /api/orders/confirm", app.requireAuth(app.ConfirmOrder))
 
-	// Admin routes
 	mux.HandleFunc("POST /api/admin/products", app.requireAdmin(app.CreateProduct))
 	mux.HandleFunc("PUT /api/admin/products/{id}", app.requireAdmin(app.UpdateProduct))
 	mux.HandleFunc("DELETE /api/admin/products/{id}", app.requireAdmin(app.DeleteProduct))
+	
+	mux.HandleFunc("GET /api/admin/users", app.requireAdmin(app.AdminListUsers))
+	mux.HandleFunc("PUT /api/admin/users/{id}/role", app.requireAdmin(app.AdminUpdateUserRole))
+    
+
+	
+	mux.HandleFunc("GET /api/profile", app.requireAuth(app.GetProfile))
+	mux.HandleFunc("PUT /api/profile", app.requireAuth(app.UpdateProfile))
+	mux.HandleFunc("PUT /api/profile/password", app.requireAuth(app.ChangePassword))
 
 	port := os.Getenv("PORT")
 	if port == "" {

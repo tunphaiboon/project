@@ -109,7 +109,7 @@ func (a *App) Register(w http.ResponseWriter, r *http.Request) {
 		a.internal(w, err)
 		return
 	}
-	user := authUser{ID: id, Email: email, DisplayName: name, Role: "member"}
+	user := authUser{ID: id, Email: email, DisplayName: name, Role: "user"}
 writeJSON(w, http.StatusCreated, map[string]any{
 	"token": token,
 	"user":  user,
@@ -130,7 +130,7 @@ func (a *App) Login(w http.ResponseWriter, r *http.Request) {
 	var u authUser
 	var hash string
 	err := a.DB.QueryRow(r.Context(),
-	`SELECT id, email, display_name, role, password_hash FROM users WHERE lower(email) = $1`, email).
+	`SELECT id, email, name, role, password FROM users WHERE lower(email) = $1`, email).
 	Scan(&u.ID, &u.Email, &u.DisplayName, &u.Role, &hash)
 	if errors.Is(err, pgx.ErrNoRows) {
 		bcrypt.CompareHashAndPassword(dummyHash, []byte(req.Password))

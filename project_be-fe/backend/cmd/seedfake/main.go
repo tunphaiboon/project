@@ -2,96 +2,92 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"os"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type dummyResponse struct {
-	Products []struct {
-		Title       string  `json:"title"`
-		Description string  `json:"description"`
-		Price       float64 `json:"price"`
-		Category    string  `json:"category"`
-		Thumbnail   string  `json:"thumbnail"`
-		Stock       int     `json:"stock"`
-	} `json:"products"`
-}
-
-var categoryMap = map[string]string{
-	"vehicle":             "auto",
-	"motorcycle":          "auto",
-	"sports-accessories":  "tools",
-	"sunglasses":          "auto",
-	"furniture":           "home",
-	"home-decoration":     "home",
-	"kitchen-accessories": "home",
-	"groceries":           "health",
-	"smartphones":         "electronics",
-	"laptops":             "electronics",
-	"tablets":             "electronics",
-	"mobile-accessories":  "electronics",
-	"mens-watches":        "electronics",
-	"womens-watches":      "electronics",
-	"beauty":              "beauty",
-	"fragrances":          "beauty",
-	"skin-care":           "beauty",
-	"tops":                "beauty",
-	"womens-dresses":      "beauty",
-	"womens-shoes":        "beauty",
-	"mens-shirts":         "home",
-	"mens-shoes":          "home",
-	"womens-bags":         "beauty",
-	"womens-jewellery":    "beauty",
+type App struct {
+	DB        *pgxpool.Pool
+	JWTSecret []byte
 }
 
 func main() {
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, os.Getenv("DATABASE_URL"))
+
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		log.Fatal("DATABASE_URL ไม่ได้ถูกกำหนด")
+	}
+
+	dbPool, err := pgxpool.New(ctx, dbURL)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("ไม่สามารถเชื่อมต่อฐานข้อมูลได้: %v", err)
 	}
-	defer pool.Close()
+	defer dbPool.Close()
 
-	client := &http.Client{Timeout: 20 * time.Second}
-	resp, err := client.Get("https://dummyjson.com/products?limit=0")
-	if err != nil {
-		log.Fatal("ดึง API ไม่สำเร็จ: ", err)
-	}
-	defer resp.Body.Close()
-
-	var data dummyResponse
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		log.Fatal("อ่าน JSON ไม่สำเร็จ: ", err)
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if len(jwtSecret) < 32 {
+		log.Fatal("JWT_SECRET ต้องยาวอย่างน้อย 32 ตัวอักษร")
 	}
 
-	_, _ = pool.Exec(ctx, `TRUNCATE order_items, cart_items, products RESTART IDENTITY CASCADE`)
-
-	inserted := 0
-	for _, p := range data.Products {
-		slug, ok := categoryMap[p.Category]
-		if !ok {
-			slug = "home"
-		}
-		priceSatang := int(p.Price * 1000)
-		stock := p.Stock
-		if stock <= 0 {
-			stock = 15
-		}
-
-		_, err := pool.Exec(ctx, `
-			INSERT INTO products (category_id, name, description, price_satang, image_url, stock)
-			VALUES ((SELECT id FROM categories WHERE slug = $1), $2, $3, $4, $5, $6)`,
-			slug, p.Title, p.Description, priceSatang, p.Thumbnail, stock)
-		if err != nil {
-			log.Printf("ข้าม %q: %v", p.Title, err)
-			continue
-		}
-		inserted++
+	app := &App{
+		DB:        dbPool,
+		JWTSecret: []byte(jwtSecret),
 	}
-	log.Printf("สำเร็จ! เติมสินค้าใหม่ทั้งหมด %d รายการ", inserted)
+
+	r := chi.NewRouter()
+
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+
+	// API Routes
+	r.Route("/api", func(r chi.Router) {
+		// Public Routes
+		r.Post("/register", app.Register)
+		r.Post("/login", app.Login)
+		r.Get("/categories", app.ListCategories)
+		r.Get("/products", app.ListProducts)
+		r.Get("/products/{id}", app.GetProduct)
+
+		// Protected User Routes
+		r.Group(func(r chi.Router) {
+			r.Use(app.requireAuth)
+			r.Get("/cart", app.GetCart)
+			r.Put("/cart", app.SetCartItem)
+			r.Post("/orders", app.CreateOrder)
+			r.Get("/orders", app.ListUserOrders)
+			r.Post("/payment/qr", app.GeneratePromptPayQR)
+		})
+
+		// Admin Routes (ตรวจสอบสิทธิ์ Admin)
+		r.Group(func(r chi.Router) {
+			r.Use(app.requireAuth)
+			r.Use(app.requireAdmin)
+
+			// จัดการสินค้า
+			r.Post("/admin/products", app.CreateProduct)
+			r.Put("/admin/products/{id}", app.UpdateProduct)
+			r.Delete("/admin/products/{id}", app.DeleteProduct)
+
+			// จัดการผู้ใช้งานระบบ
+			r.Get("/admin/users", app.AdminListUsers)
+			r.Put("/admin/users/{id}/role", app.AdminUpdateUserRole)
+		})
+	})
+
+	// เสิร์ฟไฟล์ Static ของ Frontend หากมี
+	r.Handle("/*", http.FileServer(http.Dir("./dist")))
+
+	port := ":8080"
+	log.Printf("ShopMart API ฟังอยู่ที่ %s", port)
+	if err := http.ListenAndServe(port, r); err != nil {
+		log.Fatalf("Server error: %v", err)
+	}
 }

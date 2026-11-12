@@ -67,7 +67,14 @@ export default function NavBar() {
 
           {session ? (
             <div className="flex items-center gap-2">
-              <span className="hidden text-xs text-purple-200 lg:inline">@{currentUser?.displayName || 'User'}</span>
+              {/* แก้ปุ่ม Profile ให้สไตล์เหมือนตะกร้า */}
+              <Link 
+                to="/profile" 
+                className="flex items-center gap-1.5 rounded-full bg-slate-800/80 border border-purple-500/30 px-3.5 py-1.5 hover:border-amber-400 text-slate-200 transition"
+              >
+                <span>👤</span>
+                <span className="hidden lg:inline">@{currentUser?.displayName || 'User'}</span>
+              </Link>
               <button
                 onClick={logout}
                 className="rounded-full bg-slate-800 border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-purple-950 hover:text-white transition"

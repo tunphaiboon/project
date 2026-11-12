@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 
@@ -33,7 +34,6 @@ func validateProduct(p *productInput) string {
 	return ""
 }
 
-// CreateProduct (admin) เพิ่มสินค้าใหม่
 func (a *App) CreateProduct(w http.ResponseWriter, r *http.Request, _ int64) {
 	var p productInput
 	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
@@ -46,9 +46,9 @@ func (a *App) CreateProduct(w http.ResponseWriter, r *http.Request, _ int64) {
 	}
 	var id int64
 	err := a.DB.QueryRow(r.Context(), `
-		INSERT INTO products (category_id, name, description, price_satang, image_url, stock)
-		VALUES ((SELECT id FROM categories WHERE slug = $1), $2, $3, $4, $5, $6)
-		RETURNING id`,
+        INSERT INTO products (category_id, name, description, price_satang, image_url, stock)
+        VALUES ((SELECT id FROM categories WHERE slug = $1), $2, $3, $4, $5, $6)
+        RETURNING id`,
 		p.CategorySlug, p.Name, p.Description, p.PriceSatang, p.ImageURL, p.Stock).Scan(&id)
 	if err != nil {
 		a.internal(w, err)
@@ -57,7 +57,6 @@ func (a *App) CreateProduct(w http.ResponseWriter, r *http.Request, _ int64) {
 	writeJSON(w, http.StatusCreated, map[string]any{"id": id})
 }
 
-// UpdateProduct (admin) แก้ไขสินค้า
 func (a *App) UpdateProduct(w http.ResponseWriter, r *http.Request, _ int64) {
 	id, ok := pathID(r, "id")
 	if !ok {
@@ -74,10 +73,10 @@ func (a *App) UpdateProduct(w http.ResponseWriter, r *http.Request, _ int64) {
 		return
 	}
 	tag, err := a.DB.Exec(r.Context(), `
-		UPDATE products SET
-		  category_id = (SELECT id FROM categories WHERE slug = $1),
-		  name = $2, description = $3, price_satang = $4, image_url = $5, stock = $6
-		WHERE id = $7`,
+        UPDATE products SET
+          category_id = (SELECT id FROM categories WHERE slug = $1),
+          name = $2, description = $3, price_satang = $4, image_url = $5, stock = $6
+        WHERE id = $7`,
 		p.CategorySlug, p.Name, p.Description, p.PriceSatang, p.ImageURL, p.Stock, id)
 	if err != nil {
 		a.internal(w, err)
@@ -90,15 +89,12 @@ func (a *App) UpdateProduct(w http.ResponseWriter, r *http.Request, _ int64) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// DeleteProduct (admin) ลบสินค้า
 func (a *App) DeleteProduct(w http.ResponseWriter, r *http.Request, _ int64) {
 	id, ok := pathID(r, "id")
 	if !ok {
 		writeError(w, http.StatusBadRequest, "รหัสสินค้าไม่ถูกต้อง")
 		return
 	}
-	// order_items อ้างอิง products จึงลบตรง ๆ ไม่ได้ถ้ามีประวัติการสั่งซื้อ
-	// ให้ตอบ 409 แทนการทำให้ประวัติคำสั่งซื้อหาย
 	tag, err := a.DB.Exec(r.Context(), `DELETE FROM products WHERE id = $1`, id)
 	if err != nil {
 		var pgErr interface{ SQLState() string }
@@ -116,5 +112,81 @@ func (a *App) DeleteProduct(w http.ResponseWriter, r *http.Request, _ int64) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ListAdminProducts ใช้ได้ทั้ง admin และหน้าจัดการ (ดึงสต็อกและรหัสหมวด)
 var _ = pgx.ErrNoRows
+
+type UpdateRoleRequest struct {
+	Role string `json:"role"`
+}
+
+// AdminListUsers ดึงรายชื่อผู้ใช้ทั้งหมดจาก Supabase
+func (a *App) AdminListUsers(w http.ResponseWriter, r *http.Request, _ int64) {
+	rows, err := a.DB.Query(r.Context(), `SELECT id, name, email, role, created_at FROM users ORDER BY created_at DESC`)
+	if err != nil {
+		log.Printf("Error querying users: %v", err)
+		a.internal(w, err)
+		return
+	}
+	defer rows.Close()
+
+	var users []map[string]any
+	for rows.Next() {
+		var id int64
+		var email, role string
+		var displayName *string
+		var createdAt any
+		if err := rows.Scan(&id, &displayName, &email, &role, &createdAt); err != nil {
+			log.Printf("Error scanning user row: %v", err)
+			continue
+		}
+		nameVal := ""
+		if displayName != nil {
+			nameVal = *displayName
+		}
+		users = append(users, map[string]any{
+			"id":         id,
+			"name":       nameVal,
+			"email":      email,
+			"role":       role,
+			"created_at": createdAt,
+		})
+	}
+
+	if users == nil {
+		users = []map[string]any{}
+	}
+
+	writeJSON(w, http.StatusOK, users)
+}
+
+// AdminUpdateUserRole อัปเดต Role ของผู้ใช้ (admin / member / user)
+func (a *App) AdminUpdateUserRole(w http.ResponseWriter, r *http.Request, _ int64) {
+	userID, ok := pathID(r, "id")
+	if !ok {
+		writeError(w, http.StatusBadRequest, "รหัสผู้ใช้ไม่ถูกต้อง")
+		return
+	}
+
+	var req UpdateRoleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "อ่านข้อมูลไม่ออก")
+		return
+	}
+
+	if req.Role != "admin" && req.Role != "member" && req.Role != "user" {
+		writeError(w, http.StatusBadRequest, "Role ไม่ถูกต้อง (ต้องเป็น admin, member, หรือ user)")
+		return
+	}
+
+	tag, err := a.DB.Exec(r.Context(), `UPDATE users SET role = $1 WHERE id = $2`, req.Role, userID)
+	if err != nil {
+		a.internal(w, err)
+		return
+	}
+
+	if tag.RowsAffected() == 0 {
+		writeError(w, http.StatusNotFound, "ไม่พบผู้ใช้นี้")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "success", "message": "อัปเดต Role สำเร็จ"})
+}
