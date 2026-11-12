@@ -6,7 +6,7 @@ const KEY = 'shopmart.session';
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(() => {
     const raw = localStorage.getItem(KEY);
-    return raw ? JSON.parse(raw) : null;   // session = { token, user }
+    return raw ? JSON.parse(raw) : null;
   });
 
   function saveSession(next) {

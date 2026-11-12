@@ -62,7 +62,7 @@ func (a *App) ListProducts(w http.ResponseWriter, r *http.Request) {
 	rows, err := a.DB.Query(r.Context(), `
 		SELECT p.id, p.name, p.price_satang, COALESCE(p.image_url, ''), p.stock, c.slug, c.name
 		FROM products p JOIN categories c ON c.id = p.category_id
-		WHERE `+where+` ORDER BY p.id LIMIT 60`, args...)
+		WHERE `+where+` ORDER BY p.id LIMIT 200`, args...)
 	if err != nil {
 		a.internal(w, err)
 		return

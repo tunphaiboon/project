@@ -22,8 +22,15 @@ export default function Auth({ mode }) {
       const data = isRegister
         ? await register(form)
         : await login({ email: form.email, password: form.password });
-      saveSession({ token: data.token, user: data.user });
-      navigate('/');
+      
+      const memberData = data.member || data.user;
+      saveSession({ token: data.token, member: memberData });
+
+      if (memberData?.role === 'admin') {
+        navigate('/admin');
+      } else {
+        navigate('/');
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -36,6 +43,7 @@ export default function Auth({ mode }) {
   return (
     <div className="mx-auto max-w-sm px-4 py-12">
       <h1 className="text-xl font-semibold text-slate-800">{isRegister ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ'}</h1>
+      
       <form onSubmit={submit} className="mt-6 space-y-4 rounded-lg bg-white p-6 shadow-sm">
         {isRegister && (
           <input className={input} placeholder="ชื่อที่แสดง" value={form.displayName} onChange={set('displayName')} />
@@ -51,10 +59,28 @@ export default function Auth({ mode }) {
           {busy ? 'กำลังดำเนินการ...' : isRegister ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ'}
         </button>
       </form>
+
       <p className="mt-4 text-center text-sm text-slate-500">
         {isRegister ? <>มีบัญชีแล้ว? <Link to="/login" className="text-red-600 underline">เข้าสู่ระบบ</Link></>
                     : <>ยังไม่มีบัญชี? <Link to="/register" className="text-red-600 underline">สมัครสมาชิก</Link></>}
       </p>
+
+      {!isRegister && (
+        <div className="mt-6 text-center">
+          <button
+            type="button"
+            onClick={() => {
+              localStorage.removeItem('token');
+              localStorage.removeItem('user');
+              localStorage.removeItem('shopmart.session');
+              navigate('/');
+            }}
+            className="w-full rounded-md border border-slate-300 bg-white py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition"
+          >
+            Guest
+          </button>
+        </div>
+      )}
     </div>
   );
 }

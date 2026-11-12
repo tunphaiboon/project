@@ -2,6 +2,7 @@
   "name": "shopmart-web",
   "version": "0.1.0",
   "private": true,
+  "proxy": "http://localhost:8080",
   "dependencies": {
     "@stripe/react-stripe-js": "^7.0.1",
     "@stripe/stripe-js": "^10.2.1",

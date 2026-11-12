@@ -1,6 +1,5 @@
-const BASE = process.env.REACT_APP_API_URL || 'http://localhost:8080';
+const BASE = process.env.REACT_APP_API_URL || '';
 
-// ตัวกลางเรียก API: แนบ token ถ้ามี, ตรวจ status, โยน Error ที่มีข้อความจาก server
 export async function apiFetch(path, { method = 'GET', body, token } = {}) {
   const headers = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
@@ -36,18 +35,38 @@ export const listProducts = (params = {}) => {
 
 export const getProduct = (id) => apiFetch(`/api/products/${id}`);
 
+export const createProduct = (token, body) =>
+  apiFetch('/api/products', { method: 'POST', body, token });
+
+export const updateProduct = (token, id, body) =>
+  apiFetch(`/api/products/${id}`, { method: 'PUT', body, token });
+
+export const deleteProduct = (token, id) =>
+  apiFetch(`/api/products/${id}`, { method: 'DELETE', token });
+
 export const register = (body) => apiFetch('/api/auth/register', { method: 'POST', body });
-export const login = (body) => apiFetch('/api/auth/login', { method: 'POST', body });
+
+export const login = async (body) => {
+  const data = await apiFetch('/api/auth/login', { method: 'POST', body });
+  if (data && data.token) {
+    localStorage.setItem('shopmart.session', JSON.stringify({
+      token: data.token,
+      member: data.member || data.user
+    }));
+  }
+  return data;
+};
 
 export const getCart = (token) => apiFetch('/api/cart', { token });
 export const setCartQty = (token, productId, qty) =>
   apiFetch(`/api/cart/${productId}`, { method: 'PUT', body: { qty }, token });
 
-// แปลงสตางค์เป็นข้อความบาท เช่น 120000 -> "1,200.00 ฿"
 export const formatBaht = (satang) =>
   (satang / 100).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ฿';
+
 export const checkout = (token, body) =>
   apiFetch('/api/orders', { method: 'POST', body, token });
+
 export const createPaymentIntent = (token) =>
   apiFetch('/api/payments/intent', { method: 'POST', token });
 
