@@ -64,8 +64,9 @@ func main() {
 		port = "8080"
 	}
 
-	log.Println("ShopMart API ฟังอยู่ที่ :" + port)
-	log.Fatal(http.ListenAndServe(":"+port, cors(mux)))
+	log.Println("Mercato API ฟังอยู่ที่ :" + port)
+	
+log.Fatal(http.ListenAndServe(":"+port, app.logger(cors(mux))))
 }
 
 func cors(next http.Handler) http.Handler {
