@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../auth/AuthContext"; 
 
+const API_BASE = process.env.REACT_APP_API_URL || 'https://project-be-fe.onrender.com';
+
 export default function Profile() {
   const { session } = useAuth();
   const token = session?.token || session?.access_token || localStorage.getItem("token");
@@ -11,7 +13,7 @@ export default function Profile() {
   useEffect(() => {
     if (!token) return; 
 
-    fetch("http://localhost:8080/api/profile", {
+    fetch(`${API_BASE}/api/profile`, {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then((res) => res.json())
@@ -29,7 +31,7 @@ export default function Profile() {
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
-    const res = await fetch("http://localhost:8080/api/profile", {
+    const res = await fetch(`${API_BASE}/api/profile`, {
       method: "PUT",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify(profile)
@@ -44,7 +46,7 @@ export default function Profile() {
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
-    const res = await fetch("http://localhost:8080/api/profile/password", {
+    const res = await fetch(`${API_BASE}/api/profile/password`, {
       method: "PUT",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify(passwords)

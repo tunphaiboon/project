@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { Link } from 'react-router-dom';
 
-const API_BASE = 'http://localhost:8080';
+const API_BASE = process.env.REACT_APP_API_URL || 'https://project-be-fe.onrender.com';
 
 export default function AdminUsers() {
   const { session } = useAuth();
