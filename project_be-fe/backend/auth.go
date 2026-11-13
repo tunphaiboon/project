@@ -93,7 +93,7 @@ func (a *App) Register(w http.ResponseWriter, r *http.Request) {
 	}
 	var id int64
 	err = a.DB.QueryRow(r.Context(),
-		`INSERT INTO users (email, password_hash, display_name) VALUES ($1, $2, $3) RETURNING id`,
+		`INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id`,
 		email, string(hash), name).Scan(&id)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
