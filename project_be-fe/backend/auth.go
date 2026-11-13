@@ -93,7 +93,7 @@ func (a *App) Register(w http.ResponseWriter, r *http.Request) {
 	}
 	var id int64
 	err = a.DB.QueryRow(r.Context(),
-		`INSERT INTO users (email, password, display_name) VALUES ($1, $2, $3) RETURNING id`,
+		`INSERT INTO users (email, password_hash, display_name) VALUES ($1, $2, $3) RETURNING id`,
 		email, string(hash), name).Scan(&id)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -130,7 +130,7 @@ func (a *App) Login(w http.ResponseWriter, r *http.Request) {
 	var u authUser
 	var hash string
 	err := a.DB.QueryRow(r.Context(),
-	`SELECT id, email, name, role, password FROM users WHERE lower(email) = $1`, email).
+	`SELECT id, email, name, role, password_hash FROM users WHERE lower(email) = $1`, email).
 	Scan(&u.ID, &u.Email, &u.DisplayName, &u.Role, &hash)
 	if errors.Is(err, pgx.ErrNoRows) {
 		bcrypt.CompareHashAndPassword(dummyHash, []byte(req.Password))

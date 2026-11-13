@@ -68,7 +68,7 @@ func (app *App) ChangePassword(w http.ResponseWriter, r *http.Request, userID in
 	}
 
 	var currentHash string
-	err := app.DB.QueryRow(r.Context(), "SELECT password FROM users WHERE id = $1", userID).Scan(&currentHash)
+	err := app.DB.QueryRow(r.Context(), "SELECT password_hash FROM users WHERE id = $1", userID).Scan(&currentHash)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "DB Error: "+err.Error())
 		return
@@ -85,7 +85,7 @@ func (app *App) ChangePassword(w http.ResponseWriter, r *http.Request, userID in
 		return
 	}
 
-	_, err = app.DB.Exec(r.Context(), "UPDATE users SET password = $1 WHERE id = $2", newHash, userID)
+	_, err = app.DB.Exec(r.Context(), "UPDATE users SET password_hash = $1 WHERE id = $2", newHash, userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "เปลี่ยนรหัสผ่านไม่สำเร็จ: "+err.Error())
 		return

@@ -11,7 +11,14 @@ import (
 )
 
 func getStripeKey() string {
-	return os.Getenv("STRIPE_SECRET_KEY")
+	k := os.Getenv("STRIPE_SECRET_KEY")
+	var clean []rune
+	for _, r := range k {
+		if r >= 33 && r <= 126 {
+			clean = append(clean, r)
+		}
+	}
+	return string(clean)
 }
 
 func (a *App) CreatePaymentIntent(w http.ResponseWriter, r *http.Request, userID int64) {
